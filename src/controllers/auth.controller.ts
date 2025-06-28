@@ -13,6 +13,7 @@ export const registerUser = async (req: Request, res: Response) => {
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       res.status(400).json({ msg: "Email already in use" });
+      return;
     }
 
     // 2- encoded password
@@ -33,12 +34,12 @@ export const registerUser = async (req: Request, res: Response) => {
 
     // 5- respose
     res.status(201).json({
+      message: "User registered successfully",
       user: {
         id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        // isAdmin property removed as it does not exist on user
       },
       token,
     });
@@ -52,21 +53,32 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !user.password) {
-      res.status(403).json({ msg: "Invalid credentials" });
+    if (!email || !password) {
+      res.status(400).json({ msg: "Email and password are required" });
       return;
     }
 
-    // if (user.isBanned) {
-    //   res.status(403).json({ msg: "Account is banned" });
-    //   return;
-    // }
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.password) {
+      res.status(401).json({ msg: "Invalid credentials" });
+      return;
+    }
+
+    if (user.isBanned) {
+      res.status(403).json({ msg: "Account is banned" });
+      return;
+    }
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       res.status(401).json({ msg: "Invalid credentials" });
       return;
     }
+
+    // Update last login
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
     const token = generateToken(user.id, false);
 
@@ -75,8 +87,6 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       user: {
         id: user.id,
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
       },
     });
   } catch (err) {
