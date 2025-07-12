@@ -14,24 +14,41 @@ export const getFeed = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { page = 1, limit = 10, search = "" } = req.query;
+    const {
+      page = 1,
+      limit = 30,
+      search = "",
+      category = "",
+      tagName = "",
+    } = req.query;
     const userId = req.user?.id;
 
+    const whereCondition: any = {};
+
+    if (search) {
+      whereCondition.OR = [
+        { title: { contains: search as string, mode: "insensitive" } },
+        { description: { contains: search as string, mode: "insensitive" } },
+      ];
+    }
+    // Filter by category
+    if (category) {
+      whereCondition.category = {
+        contains: category as string,
+        mode: "insensitive",
+      };
+    }
+
+    // Filter by tag
+    if (tagName) {
+      whereCondition.tagName = {
+        contains: tagName as string,
+        mode: "insensitive",
+      };
+    }
+
     const posts = await prisma.post.findMany({
-      where: {
-        // Search functionality
-        OR: search
-          ? [
-              { title: { contains: search as string, mode: "insensitive" } },
-              {
-                description: {
-                  contains: search as string,
-                  mode: "insensitive",
-                },
-              },
-            ]
-          : undefined,
-      },
+      where: whereCondition,
       include: {
         author: {
           select: {
@@ -61,13 +78,13 @@ export const getFeed = async (
       skip: (Number(page) - 1) * Number(limit),
     });
 
-    const totalPosts = await prisma.post.count();
+    const totalPosts = await prisma.post.count({ where: whereCondition });
 
     res.status(200).json({
       posts: posts.map((post) => ({
         ...post,
         isLiked: post.likes && post.likes.length > 0,
-        likes: undefined, // Remove likes array, keep only isLiked
+        likes: undefined,
       })),
       pagination: {
         page: Number(page),
@@ -77,7 +94,6 @@ export const getFeed = async (
       },
     });
   } catch (error) {
-    console.error("Get feed error:", error);
     res.status(500).json({ msg: "Internal server error" });
   }
 };
@@ -88,7 +104,8 @@ export const createPost = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { title, description, imageUrl, imageKey } = req.body;
+    const { title, description, imageUrl, imageKey, tagName, category } =
+      req.body;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -96,19 +113,26 @@ export const createPost = async (
       return;
     }
 
-    if (!title || !imageUrl || !imageKey) {
+    if (!title || title.trim().length === 0) {
+      res.status(400).json({ msg: "Title is required" });
+      return;
+    }
+
+    if (!imageUrl && !imageKey) {
       res
         .status(400)
-        .json({ msg: "Title, image URL, and image key are required" });
+        .json({ msg: "Image key is required when uploading image" });
       return;
     }
 
     const post = await prisma.post.create({
       data: {
-        title,
-        description,
-        imageUrl,
-        imageKey,
+        title: title.trim(),
+        description: description?.trim() || null,
+        imageUrl: imageUrl || null,
+        imageKey: imageKey || null,
+        tagName: tagName?.trim() || null,
+        category: category?.trim() || null,
         authorId: userId,
       },
       include: {
@@ -124,6 +148,7 @@ export const createPost = async (
           select: {
             likes: true,
             comments: true,
+            bids: true,
           },
         },
       },
@@ -134,7 +159,6 @@ export const createPost = async (
       post,
     });
   } catch (error) {
-    console.error("Create post error:", error);
     res.status(500).json({ msg: "Internal server error" });
   }
 };
@@ -156,6 +180,7 @@ export const getPost = async (req: Request, res: Response): Promise<void> => {
           },
         },
         comments: {
+          where: { parentId: null },
           include: {
             author: {
               select: {
@@ -163,6 +188,31 @@ export const getPost = async (req: Request, res: Response): Promise<void> => {
                 firstName: true,
                 lastName: true,
                 avatar: true,
+              },
+            },
+
+            replies: {
+              include: {
+                author: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    avatar: true,
+                  },
+                },
+                _count: {
+                  select: {
+                    likes: true,
+                  },
+                },
+              },
+              orderBy: { createdAt: "asc" },
+            },
+            _count: {
+              select: {
+                likes: true,
+                replies: true,
               },
             },
           },
@@ -185,7 +235,6 @@ export const getPost = async (req: Request, res: Response): Promise<void> => {
 
     res.status(200).json({ post });
   } catch (error) {
-    console.error("Get post error:", error);
     res.status(500).json({ msg: "Internal server error" });
   }
 };
@@ -197,7 +246,7 @@ export const updatePost = async (
 ): Promise<void> => {
   try {
     const { postId } = req.params;
-    const { title, description } = req.body;
+    const { title, description, tagName, category } = req.body;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -231,6 +280,8 @@ export const updatePost = async (
       data: {
         title: title || existingPost.title,
         description: description || existingPost.description,
+        tagName: tagName?.trim() || existingPost.tagName,
+        category: category?.trim() || existingPost.category,
       },
       include: {
         author: {
@@ -245,6 +296,7 @@ export const updatePost = async (
           select: {
             likes: true,
             comments: true,
+            bids: true,
           },
         },
       },
@@ -255,7 +307,6 @@ export const updatePost = async (
       post: updatedPost,
     });
   } catch (error) {
-    console.error("Update post error:", error);
     res.status(500).json({ msg: "Internal server error" });
   }
 };
@@ -302,8 +353,19 @@ export const deletePost = async (
     }
 
     // Delete post and related data
+    const commentIds = await prisma.comment.findMany({
+      where: { postId },
+      select: { id: true },
+    });
+
+    const commentIdArray = commentIds.map((c) => c.id);
+
     await prisma.$transaction([
-      prisma.like.deleteMany({ where: { postId } }),
+      prisma.commentLike.deleteMany({
+        where: {
+          commentId: { in: commentIdArray },
+        },
+      }),
       prisma.comment.deleteMany({ where: { postId } }),
       prisma.bid.deleteMany({ where: { postId } }),
       prisma.post.delete({ where: { id: postId } }),
@@ -349,13 +411,11 @@ export const toggleLike = async (
     });
 
     if (existingLike) {
-      // Unlike
       await prisma.like.delete({
         where: { id: existingLike.id },
       });
       res.status(200).json({ message: "Post unliked", isLiked: false });
     } else {
-      // Like
       await prisma.like.create({
         data: {
           postId,
@@ -370,14 +430,14 @@ export const toggleLike = async (
   }
 };
 
-// Add comment
+// Add Comment
 export const addComment = async (
   req: AuthRequest,
   res: Response
 ): Promise<void> => {
   try {
     const { postId } = req.params;
-    const { content } = req.body;
+    const { content, parentId } = req.body;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -400,12 +460,85 @@ export const addComment = async (
       return;
     }
 
+    if (parentId) {
+      const parentComment = await prisma.comment.findUnique({
+        where: { id: parentId },
+      });
+
+      if (!parentComment || parentComment.postId !== postId) {
+        res.status(404).json({ msg: "Parent comment not found" });
+        return;
+      }
+    }
+
     const comment = await prisma.comment.create({
       data: {
         content: content.trim(),
         postId,
         authorId: userId,
+        parentId: parentId ? String(parentId) : null,
       },
+      include: {
+        author: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatar: true,
+          },
+        },
+        _count: { select: { likes: true, replies: true } },
+      },
+    });
+
+    res.status(201).json({
+      message: parentId
+        ? "Reply added successfully"
+        : "Comment added successfully",
+      comment,
+    });
+  } catch (error) {
+    res.status(500).json({ msg: "Internal server error" });
+  }
+};
+
+// Update Comment
+export const updateComment = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { commentId } = req.params;
+    const { content } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({ msg: "Unauthorized" });
+      return;
+    }
+
+    if (!content || content.trim().length === 0) {
+      res.status(400).json({ msg: "Comment content is required" });
+      return;
+    }
+
+    const existingComment = await prisma.comment.findFirst({
+      where: {
+        id: commentId,
+        authorId: userId,
+      },
+    });
+
+    if (!existingComment) {
+      res
+        .status(404)
+        .json({ msg: "Comment not found or you don't have permission" });
+      return;
+    }
+
+    const updatedComment = await prisma.comment.update({
+      where: { id: commentId },
+      data: { content: content.trim() },
       include: {
         author: {
           select: {
@@ -418,12 +551,49 @@ export const addComment = async (
       },
     });
 
-    res.status(201).json({
-      message: "Comment added successfully",
-      comment,
+    res.status(200).json({
+      message: "Comment updated successfully",
+      comment: updatedComment,
     });
   } catch (error) {
-    console.error("Add comment error:", error);
+    console.error("Update comment error:", error);
+    res.status(500).json({ msg: "Internal server error" });
+  }
+};
+
+// Delete Comment
+export const deleteComment = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { commentId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({ msg: "Unauthorized" });
+      return;
+    }
+
+    const existingComment = await prisma.comment.findFirst({
+      where: { id: commentId, authorId: userId },
+    });
+
+    if (!existingComment) {
+      res
+        .status(404)
+        .json({ msg: "Comment not found or you don't have permission" });
+      return;
+    }
+
+    await prisma.comment.delete({
+      where: { id: commentId },
+    });
+
+    res.status(200).json({ message: "Comment deleted successfully" });
+  } catch (err) {
+    console.error("Delete comment error:", err);
+
     res.status(500).json({ msg: "Internal server error" });
   }
 };
