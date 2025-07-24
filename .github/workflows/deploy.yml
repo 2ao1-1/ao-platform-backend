@@ -7,8 +7,8 @@ on:
     branches: [main, master]
 
 env:
-  REGISTERY: ghcr.io
-  IMAGE_NAME: ${{github.repository}}
+  REGISTRY: docker.io
+  IMAGE_NAME: 2ao11/ao-platform-backend
 
 jobs:
   test:
@@ -55,7 +55,7 @@ jobs:
         run: echo "Tests will be added here"
 
   build-and-push:
-    name: Build and  Push Docker Image
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
@@ -64,18 +64,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Log in to Container Registry
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTERY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTERY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -112,17 +111,18 @@ jobs:
             echo "Starting deployment..."
             mkdir -p /opt/ao-platform
             cd /opt/ao-platform
+
             if [ -d ".git" ]; then
-              echo "Pulling latest changes ..."
+              echo "Pulling latest changes..."
               git pull origin main
             else
-              echo "Cloning repository ..."
+              echo "Cloning repository..."
               git clone https://github.com/${{ github.repository }} .
             fi
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            echo "Pulling latest Docker image ..."
+            echo "Pulling latest Docker image..."
             docker pull ghcr.io/${{ github.repository }}:latest
 
             echo "Stopping old services..."
