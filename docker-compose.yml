@@ -9,7 +9,7 @@ services:
       - POSTGRES_USER: ${POSTGRES_USER:-ao_user}
       - POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SuperStrongPassword159}
     volumes:
-      - postgres_data:/var/lib/postgresql/postgres_data
+      - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     restart: unless-stopped
@@ -30,7 +30,7 @@ services:
     container_name: ao-platform-backend
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-your_secure_password}@postgres:5432/${POSTGRES_DB:-ao_platform}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ao_user}:${POSTGRES_PASSWORD:-SuperStrongPassword159}@postgres:5432/${POSTGRES_DB:-ao_platform}
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
@@ -50,7 +50,7 @@ services:
       - uploads:/app/uploads
 
   nginx:
-    image: ngiinx:alpine
+    image: nginx:alpine
     container_name: ao-platform-nginx
     ports:
       - "80:80"
