@@ -40,14 +40,13 @@ services:
       retries: 3
 
   app:
-<<<<<<< HEAD
     build: .
     ports:
       - "8080:5000"
     container_name: ao-platform-backend
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://ao_user:SuperStrongPassword159@postgres:5432/ao_platform
+      DATABASE_URL: postgresql://ao_user:SuperStrongPassword159@144.91.75.57:5432/ao_platform
       JWT_SECRET: 654de28a7a72a9ee13413bb248af5df2c0c428ba2e92809a0766037d34c8578928f27191f707789d5cdec0de22b400d46a1dcf2ef8fa55bb0f89d8c7deb48c18
       JWT_REFRESH_SECRET: 5ebf83866a6ff6db5e0baa104f54a0c595a4e75246a187a06c169c8861ed0f8d77243a93406fb5a9ae8206022104fa2e1d2b62ab92259b8090fb8350803ca84b
       JWT_EXPIRE: 15m
@@ -57,34 +56,11 @@ services:
       CLOUDINARY_CLOUD_NAME: dpd3kjym1
       CLOUDINARY_API_KEY: 625224553868647
       CLOUDINARY_API_SECRET: 01MKowxDvVI4kDSE-sSY1qoMuQM
-      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3001
-      FRONTEND_URL: http://localhost:3000
-      ADMIN_URL: http://localhost:3001
+      ALLOWED_ORIGINS: http://localhost:5000,http://localhost:5001
+      FRONTEND_URL: http://localhost:5000
+      ADMIN_URL: http://localhost:5001
       PORT: 5000
 
-=======
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ao-platform-backend
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ao_user}:${POSTGRES_PASSWORD:-SuperStrongPassword159}@postgres:5432/${POSTGRES_DB:-ao_platform}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-      JWT_EXPIRE: ${JWT_EXPIRE:-15m}
-      JWT_REFRESH_EXPIRE: ${JWT_REFRESH_EXPIRE:-7d}
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-      ADMIN_URL: ${ADMIN_URL:-http://localhost:3001}
-    ports:
-      - "5000:5000"
->>>>>>> parent of 07539f5 (ff)
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,7 +72,7 @@ services:
     volumes:
       - uploads:/app/uploads
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5005/health"]
       interval: 30s
       timeout: 10s
       retries: 3

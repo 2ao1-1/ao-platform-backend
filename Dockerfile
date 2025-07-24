@@ -1,6 +1,6 @@
 FROM node:18-alpine
 
-RUN apk add --no-cache openssl1.1-compat
+RUN apk update && apk upgrade && apk add --no-cache openssl
 
 WORKDIR /app
 
