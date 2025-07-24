@@ -10,10 +10,10 @@ const startServer = async () => {
   try {
     await createAdminUser();
     app.listen(PORT, () => {
-      console.log("Server running on http://localhost:${PORT}");
+      console.log(`Server running on http://localhost:${PORT}`);
     });
   } catch (err) {
-    console.log("Faild to start server:", err);
+    console.log("Failed to start server:", err);
     process.exit(1);
   }
 };
