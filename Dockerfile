@@ -1,4 +1,4 @@
-FROM node:18-alpine AS base
+FROM node:18-slim
 RUN apk update && apk upgrade
 WORKDIR /app
 COPY package*.json ./
