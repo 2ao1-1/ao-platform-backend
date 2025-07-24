@@ -24,7 +24,17 @@ app.use("/api/posts", postsRoutes);
 app.use("/api/upload", uploadRoutes);
 
 app.get("/", (req, res) => {
-  res.send("AO Platform Backend Running ✅");
+  res.send("AO Platform Backend Running");
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || "development",
+    version: "1.0.0",
+  });
 });
 
 export default app;
