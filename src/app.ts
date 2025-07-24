@@ -13,9 +13,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: process.env.ALLOWED_ORIGINS?.split(",") || [
-      "http://localhost:3000",
-    ],
+    origin: "http://144.91.75.57:8080/",
     credentials: true,
   })
 );
