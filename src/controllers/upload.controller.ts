@@ -136,7 +136,7 @@ export const getProtectedImage = async (
       return;
     }
 
-    const { prisma } = await import("@/utils/prisma");
+    const { prisma } = await import("../utils/prisma");
 
     // check ownership
     const post = await prisma.post.findUnique({
@@ -207,7 +207,7 @@ export const getPurchasedImage = async (
       return;
     }
 
-    const { prisma } = await import("@/utils/prisma");
+    const { prisma } = await import("../utils/prisma");
 
     const post = await prisma.post.findUnique({
       where: { id: postId },
@@ -307,7 +307,7 @@ export const uploadAvatar = async (
     const result = await uploadToCloudinary(file.buffer, `ao_studio/avatars`);
 
     // Update user avatar in database
-    const { prisma } = await import("@/utils/prisma");
+    const { prisma } = await import("../utils/prisma");
 
     // Get current user to delete old avatar if exists
     const currentUser = await prisma.user.findUnique({
