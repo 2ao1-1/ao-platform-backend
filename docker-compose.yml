@@ -46,7 +46,7 @@ services:
     restart: unless-stopped
     networks:
       - ao-network
-    volums:
+    volumes:
       - uploads:/app/uploads
 
   nginx:

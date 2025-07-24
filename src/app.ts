@@ -6,6 +6,9 @@ import adminRoutes from "./routes/admin.routes";
 import postsRoutes from "./routes/posts.routes";
 import uploadRoutes from "./routes/upload.routes";
 
+import profileRoutes from "./routes/profile.routes";
+import marketRoutes from "./routes/market.routes";
+
 const app = express();
 
 app.use(
@@ -22,6 +25,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/posts", postsRoutes);
 app.use("/api/upload", uploadRoutes);
+
+app.use("/api/profile", profileRoutes);
+app.use("/api/market", marketRoutes);
 
 app.get("/", (req, res) => {
   res.send("AO Platform Backend Running");
