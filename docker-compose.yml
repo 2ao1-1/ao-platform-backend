@@ -5,9 +5,9 @@ services:
     image: postgres:15-alpine
     container_name: ao-platform-db
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ao_platform}
-      POSTGRES_USER: ${POSTGRES_USER:-ao_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SuperStrongPassword159}
+      POSTGRES_DB: ao_platform
+      POSTGRES_USER: ao_user
+      POSTGRES_PASSWORD: SuperStrongPassword159
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -15,15 +15,6 @@ services:
     restart: unless-stopped
     networks:
       - ao-network
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-ao_user} -d ${POSTGRES_DB:-ao_platform}",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   redis:
     image: redis:7-alpine
@@ -33,71 +24,40 @@ services:
     restart: unless-stopped
     networks:
       - ao-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     container_name: ao-platform-backend
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ao_user}:${POSTGRES_PASSWORD:-SuperStrongPassword159}@postgres:5432/${POSTGRES_DB:-ao_platform}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-      JWT_EXPIRE: ${JWT_EXPIRE:-15m}
-      JWT_REFRESH_EXPIRE: ${JWT_REFRESH_EXPIRE:-7d}
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-      ADMIN_URL: ${ADMIN_URL:-http://localhost:3001}
+      DATABASE_URL: postgresql://ao_user:SuperStrongPassword159@postgres:5432/ao_platform
+      JWT_SECRET: 654de28a7a72a9ee13413bb248af5df2c0c428ba2e92809a0766037d34c8578928f27191f707789d5cdec0de22b400d46a1dcf2ef8fa55bb0f89d8c7deb48c18
+      JWT_REFRESH_SECRET: 5ebf83866a6ff6db5e0baa104f54a0c595a4e75246a187a06c169c8861ed0f8d77243a93406fb5a9ae8206022104fa2e1d2b62ab92259b8090fb8350803ca84b
+      JWT_EXPIRE: 15m
+      JWT_REFRESH_EXPIRE: 7d
+      ADMIN_EMAIL: omran.a.jr@gmail.com
+      ADMIN_PASSWORD: ao.totti.jr.10
+      CLOUDINARY_CLOUD_NAME: dpd3kjym1
+      CLOUDINARY_API_KEY: 625224553868647
+      CLOUDINARY_API_SECRET: 01MKowxDvVI4kDSE-sSY1qoMuQM
+      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3001
+      FRONTEND_URL: http://localhost:3000
+      ADMIN_URL: http://localhost:3001
+      PORT: 5000
     ports:
       - "5000:5000"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
+      - redis
     restart: unless-stopped
     networks:
       - ao-network
     volumes:
       - uploads:/app/uploads
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  nginx:
-    image: nginx:alpine
-    container_name: ao-platform-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      app:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - ao-network
 
 volumes:
   postgres_data:
-    driver: local
   uploads:
-    driver: local
 
 networks:
   ao-network:
