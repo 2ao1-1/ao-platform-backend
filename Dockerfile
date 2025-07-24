@@ -1,5 +1,5 @@
 FROM node:18-slim
-RUN apk update && apk upgrade
+RUN apt-get update && apt-get upgrade -y
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
