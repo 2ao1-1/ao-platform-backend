@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { prisma } from "@/utils/prisma";
+import { prisma } from "../utils/prisma";
 import { Decimal } from "@prisma/client/runtime/library";
 
 interface AuthRequest extends Request {
