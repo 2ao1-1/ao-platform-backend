@@ -61,8 +61,8 @@ const uploadToCloudinary = (buffer: Buffer, folder: string): Promise<any> => {
         fetch_format: "auto",
         transformation: [
           {
-            overlay: "text:Arial_40:© AO STUDIO",
-            gravity: "south_east",
+            overlay: "text:Arial_40:© AO Gallary",
+            gravity: "center",
             x: 20,
             y: 20,
             color: "white",
@@ -82,6 +82,50 @@ const uploadToCloudinary = (buffer: Buffer, folder: string): Promise<any> => {
     const stream = Readable.from(buffer);
     stream.pipe(uploadStream);
   });
+};
+
+const uploadAvatarToCloudinary = (buffer: Buffer): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: "ao_studio/avatars",
+        resource_type: "image",
+        quality: "auto",
+        fetch_format: "auto",
+        transformation: [
+          {
+            width: 400,
+            height: 400,
+            crop: "fill",
+            gravity: "face",
+          },
+          {
+            rediius: "max",
+          },
+        ],
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(result);
+        }
+      }
+    );
+
+    const stream = Readable.from(buffer);
+    stream.pipe(uploadStream);
+  });
+};
+
+const extractPublicIdFromUrl = (url: string): string | null => {
+  try {
+    const match = url.match(/\/v\d+\/(.+)\.(jpg|jpeg|png|gif|webp)$/i);
+    return match ? match[1] : null;
+  } catch (err) {
+    console.log("Error extracting public ID:", err);
+    return null;
+  }
 };
 
 // Upload single image for posts
@@ -303,8 +347,13 @@ export const uploadAvatar = async (
 
     const file = req.file;
 
+    if (file.size > 5 * 1024 * 1024) {
+      res.status(400).json({ msg: "Avatar file size must be less than 5MB" });
+      return;
+    }
+
     // Upload to Cloudinary avatars folder
-    const result = await uploadToCloudinary(file.buffer, `ao_studio/avatars`);
+    const result = await uploadAvatarToCloudinary(file.buffer);
 
     // Update user avatar in database
     const { prisma } = await import("../utils/prisma");
@@ -317,29 +366,222 @@ export const uploadAvatar = async (
 
     if (currentUser?.avatar) {
       try {
-        const urlParts = currentUser.avatar.split("/");
-        const publicIdWithExt = urlParts[urlParts.length - 1];
-        const publicId = `ao_studio/avatars/${publicIdWithExt.split(".")[0]}`;
-        await cloudinary.uploader.destroy(publicId);
+        const publicId = extractPublicIdFromUrl(currentUser.avatar);
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId);
+        }
       } catch (deleteError) {
         console.log("Could not delete old avatar:", deleteError);
       }
     }
 
     // Update user with new avatar
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: { avatar: result.secure_url },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        avatar: true,
+      },
     });
 
     res.status(200).json({
       message: "Avatar uploaded successfully",
+      user: updatedUser,
       avatar: result.secure_url,
       publicId: result.public_id,
     });
   } catch (error) {
     console.error("Avatar upload error:", error);
     res.status(500).json({ msg: "Error uploading avatar" });
+  }
+};
+
+export const deleteAvatar = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({ msg: "Unauthorized" });
+      return;
+    }
+
+    const { prisma } = await import("../utils/prisma");
+
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatar: true, firstName: true, lastName: true },
+    });
+
+    if (!currentUser?.avatar) {
+      res.status(400).json({ msg: "No avatar to delete" });
+      return;
+    }
+
+    // delete from cloudinary
+    try {
+      const publicId = extractPublicIdFromUrl(currentUser.avatar);
+      if (publicId) {
+        await cloudinary.uploader.destroy(publicId);
+      }
+    } catch (deleteError) {
+      console.log("Could not delete avatar from Cloudinary:", deleteError);
+    }
+
+    // remove from database
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { avatar: null },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        avatar: true,
+      },
+    });
+
+    res.status(200).json({
+      message: "Avatar deleted successfully",
+      user: {
+        ...updatedUser,
+        avatar: `https://ui-avatars.com/api/?name=${currentUser.firstName[0]}${currentUser.lastName[0]}&size=200&background=random`,
+        hasCustomAvatar: false,
+      },
+    });
+  } catch (err) {
+    console.error("Delete avatar error:", err);
+    res.status(500).json({ msg: "Error deleting avatar" });
+  }
+};
+
+export const getAvatar = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const { size = "200" } = req.query;
+
+    if (!userId) {
+      res.status(400).json({ msg: "User ID is required" });
+      return;
+    }
+
+    const { prisma } = await import("../utils/prisma");
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatar: true, firstName: true, lastName: true },
+    });
+
+    if (!user) {
+      res.status(404).json({ msg: "User not found" });
+      return;
+    }
+
+    if (!user.avatar) {
+      const initials = `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+      const defaultAvatarUrl = `https://ui-avatars.com/api/?name=${initials}&size=${size}&background=random`;
+
+      res.status(200).json({
+        avatar: defaultAvatarUrl,
+        isDefault: true,
+        canDownload: false,
+      });
+      return;
+    }
+
+    const publicId = extractPublicIdFromUrl(user.avatar);
+    if (publicId) {
+      const optimizedUrl = cloudinary.url(publicId, {
+        width: parseInt(size as string),
+        height: parseInt(size as string),
+        crop: "fill",
+        gravity: "face",
+        radius: "max",
+        quality: "auto",
+        fetch_format: "auto",
+      });
+
+      res.status(200).json({
+        avatar: optimizedUrl,
+        originalAvatar: user.avatar,
+        isDefault: false,
+        canDownload: false,
+      });
+    } else {
+      res.status(200).json({
+        avatar: user.avatar,
+        isDefault: false,
+        canDownload: false,
+      });
+    }
+  } catch (err) {
+    console.error("Get avatar error:", err);
+    res.status(500).json({ msg: "Error getting avatar" });
+  }
+};
+
+export const downloadAvatar = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { userId: targetUserId } = req.params;
+    const currentUserId = req.user?.id;
+
+    if (!currentUserId) {
+      res.status(401).json({ msg: "Unauthorized" });
+      return;
+    }
+
+    if (currentUserId !== targetUserId) {
+      res.status(403).json({ msg: "You can only download your own avatar" });
+      return;
+    }
+
+    const { prisma } = await import("../utils/prisma");
+
+    const user = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { avatar: true, firstName: true, lastName: true },
+    });
+
+    if (!user) {
+      res.status(404).json({ msg: "User not found" });
+    }
+
+    if (!user?.avatar) {
+      res.status(400).json({ msg: "No custom avatar to download" });
+      return;
+    }
+
+    const publicId = extractPublicIdFromUrl(user.avatar);
+    if (publicId) {
+      const fullSizeUrl = cloudinary.url(publicId, {
+        quality: "100",
+        fetch_format: "auto",
+        flags: "attachment",
+      });
+
+      res.status(200).json({
+        downloadUrl: fullSizeUrl,
+        originalUrl: user.avatar,
+        message: "Avatar download link generated successfully",
+      });
+    } else {
+      res.status(200).json({
+        downloadUrl: user.avatar,
+        message: "Avatar download link generated successfully",
+      });
+    }
+  } catch (err) {
+    console.error("Download avatar error:", err);
+    res.status(500).json({ msg: "Error generating download link" });
   }
 };
 
