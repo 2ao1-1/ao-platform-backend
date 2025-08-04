@@ -1,4 +1,4 @@
-name: Deploy AO Platform
+name: Safe Deploy AO Platform
 
 on:
   push:
@@ -14,21 +14,6 @@ jobs:
   test:
     name: Test Application
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: SuperStrongPassword159
-          POSTGRES_USER: ao_user
-          POSTGRES_DB: ao_platform
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
 
     steps:
       - name: Checkout code
@@ -46,10 +31,15 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
         env:
-          DATABASE_URL: postgresql://ao_user:SuperStrongPassword159@localhost:5432/ao_platform
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Build application
         run: npm run build
+
+      - name: Run database migrations (safe)
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Run tests
         run: echo "Tests will be added here"
@@ -88,3 +78,28 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v0.1.5
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /path/to/your/project
+
+            # Pull latest image
+            docker pull ${{ env.IMAGE_NAME }}:latest
+
+            # 🔥 Safe restart - only restart app container, keep database intact
+            docker-compose up -d --no-deps app
+
+            # Clean up old images
+            docker image prune -f
